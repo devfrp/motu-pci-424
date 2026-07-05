@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Kbuild file for the motu424 out-of-tree module.
+
+obj-m += motu424.o
+motu424-y := motu424_main.o motu424_hw.o motu424_pcm.o
+
+ccflags-y += -Wall
