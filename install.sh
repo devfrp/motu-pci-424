@@ -252,8 +252,8 @@ Next steps:
                         re-run with --gui to install those)
   • Remove everything:  ./install.sh --uninstall
 
-Firmware note: the classic PCI-324/424 Altera bitstream (altera424b.rbf) is NOT
-shipped here and is not in the 4.0.6 vendor installer. If the driver asks for it
-via request_firmware, place it at /lib/firmware/altera424b.rbf. See
-docs/fpga-upload.md. (The PCIe HD Express uses a different image.)
+Firmware note: reverse-engineering indicates the classic PCI-324/424 self-
+configures its FPGA from onboard flash, so NO host firmware upload is expected -
+nothing to install (see docs/fpga-upload.md). The PCIe HD Express variant uses a
+separate on-board ARM+Xilinx image and is out of scope for this driver.
 EOF
