@@ -1,5 +1,7 @@
 # motu-pci-424
 
+*Read this in: **English** · [Français](README.fr.md)*
+
 A from-scratch Linux ALSA driver for the **MOTU PCI-324 / PCI-424** audio card
 and its AudioWire breakout interfaces (2408, 24I/O, 828, HD192, 896HD, …).
 
@@ -96,7 +98,7 @@ automatically as the driver registers them, and degrades cleanly when absent.
 The card is not present on the development machine, so the register offsets in
 `kernel/motu424.h` (marked `TODO: verify`) are hypotheses. To confirm them:
 
-1. **Identify the card.** `lspci -nn | grep 1221` (0x1221 = Mark of the Unicorn).
+1. **Identify the card.** `lspci -nn | grep -i 137a` (0x137A = Mark of the Unicorn).
    Update `PCI_DEVICE_ID_MOTU_PCI*` if the reported device ID differs.
 2. **Dump BAR0** with the vendor driver *unbound*:
    ```sh

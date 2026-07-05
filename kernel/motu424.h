@@ -79,7 +79,7 @@
  *      variant image. The Linux driver will need request_firmware() before any
  *      audio is possible.
  *
- * The MOTU424_REG_*/CTRL_*/STAT_* constants below are the ORIGINAL hypothesis
+ * The MOTU424_REG_*, CTRL_*, STAT_* constants below are the ORIGINAL hypothesis
  * and are retained only so the existing framework builds. They do NOT match the
  * windowed model above and must be reworked in motu424_hw.c once the concrete
  * register semantics (rate/clock/dmaPoint/IRQ) are decoded. Do not trust them.

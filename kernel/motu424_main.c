@@ -28,8 +28,8 @@ module_param_array(enable, bool, NULL, 0444);
 MODULE_PARM_DESC(enable, "Enable the MOTU PCI-424 card.");
 
 static const struct pci_device_id motu424_ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_MOTU, PCI_DEVICE_ID_MOTU_PCI324) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_MOTU, PCI_DEVICE_ID_MOTU_PCI424) },
+	{ PCI_DEVICE(MOTU424_VENDOR_ID, MOTU424_DEV_PCI424_A) },	/* PCI-324  */
+	{ PCI_DEVICE(MOTU424_VENDOR_ID, MOTU424_DEV_PCI424_B) },	/* PCI-424  */
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, motu424_ids);
@@ -115,7 +115,7 @@ static int motu424_probe(struct pci_dev *pci, const struct pci_device_id *ent)
 	pci_set_master(pci);
 
 	snprintf(chip->model, sizeof(chip->model), "MOTU PCI-%s",
-		 ent->device == PCI_DEVICE_ID_MOTU_PCI324 ? "324" : "424");
+		 ent->device == MOTU424_DEV_PCI424_A ? "324" : "424");
 
 	/* Bring the hardware to a known idle state before enabling IRQs. */
 	err = motu424_hw_init(chip);
