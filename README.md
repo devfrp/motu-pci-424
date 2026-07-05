@@ -2,6 +2,8 @@
 
 *Read this in: **English** · [Français](README.fr.md)*
 
+🌐 **Website:** <https://devfrp.github.io/motu-pci-424/>
+
 A from-scratch Linux ALSA driver for the **MOTU PCI-324 / PCI-424** audio card
 and its AudioWire breakout interfaces (2408, 24I/O, 828, HD192, 896HD, …).
 
@@ -36,6 +38,7 @@ Installs on any distro (deps + DKMS module + tools). Details and options under
 | `get.sh` | **`curl \| sh` bootstrap** — fetch sources + run the installer |
 | `install.sh` | **Cross-distro installer** (deps + DKMS + tools) |
 | `ARCHITECTURE.md` | Design notes: the 3-layer split + hardware-confinement rule |
+| `docs/index.html` | Project website (GitHub Pages landing page) |
 | `dkms.conf` | DKMS packaging for automatic rebuilds across kernels |
 
 The design goal: **all uncertainty is confined to `motu424.h` + `motu424_hw.c`.**
