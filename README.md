@@ -35,7 +35,7 @@ Installs on any distro (deps + DKMS module + tools). Details and options under
 | `kernel/motu424_main.c` | PCI attach/detach, resource + IRQ management, interrupt handler |
 | `kernel/motu424_hw.c` | **Hardware abstraction — the only file with real register semantics** |
 | `kernel/motu424_pcm.c` | ALSA PCM callbacks (playback + capture) |
-| `tools/motu424-probe.c` | Userspace BAR0 dumper for reverse engineering |
+| `tools/motu424-probe.c` | Userspace BAR enumerator/dumper (windowed model) for reverse engineering |
 | `tools/motu424-ctl.c` | **CueMix-style management CLI** (clock/format + monitor mixer) over alsa-lib |
 | `tools/motu424-gui` | **GTK4 GUI** control panel (a front-end over `motu424-ctl`) |
 | `tools/re/` | Static-RE helpers (`vtable-scan.py`, capstone `xref.py`) |
@@ -119,25 +119,33 @@ driver exposes its kcontrols.
 
 ## Reverse engineering
 
-The card is not present on the development machine, so the register offsets in
-`kernel/motu424.h` (marked `TODO: verify`) are hypotheses. To confirm them:
+The driver already implements the RE'd hardware model; what a real card must
+supply are the **card-reported runtime addresses** (audio base, IRQ ack, the two
+aperture bases) and a few values still marked `TODO: verify`. Bring-up flow:
 
 1. **Identify the card.** `lspci -nn | grep -i 137a` (0x137A = Mark of the Unicorn).
-   Update `PCI_DEVICE_ID_MOTU_PCI*` if the reported device ID differs.
-2. **Dump BAR0** with the vendor driver *unbound*:
+2. **Enumerate + classify the BARs** with the driver *unbound*:
    ```sh
-   sudo ./tools/motu424-probe
+   sudo ./tools/motu424-probe                       # tags window A / B / port
+   sudo ./tools/motu424-probe 0000:01:00.0 0xc0000 0x400   # window-B dump @off,len
    ```
-3. **Diff** a dump taken while idle against one taken while the card streams
-   audio under the vendor OS (macOS/Windows) to locate the status, DMA-position
-   and IRQ registers.
-4. **Trace the DMA ring / event format** (channel count per sample-rate family,
-   24-bit packing, endianness).
-5. Update the constants in `motu424.h` and the encoders in `motu424_hw.c`.
+   It reads the known window-B bank ctrl/status regs and takes a targeted dump
+   for **diffing** idle vs. streaming (under the vendor OS) to locate the audio
+   base / ack / aperture card addresses.
+3. **Inject those addresses** and load the driver:
+   ```sh
+   sudo insmod kernel/motu424.ko \
+       audio_base=0x… ack_addr=0x… play_aperture=0x… cap_aperture=0x…
+   ```
+   Without them the card registers but streaming is refused (`-ENXIO`) — this is
+   deliberate, so the driver never pokes unknown addresses.
+4. **Trace the event format** (channel count per sample-rate family, 24-bit
+   packing, endianness) and the exact `base+0x64` rate dword.
+5. Fold confirmed values into `motu424.h` / `motu424_hw.c` (drop the params).
 
-Much of the protocol has **already** been recovered statically from the vendor
-driver (no card needed) — the confirmed facts below supersede the header's
-guesses; the remaining gaps are what steps 1–5 close on real hardware.
+Most of the protocol was **already** recovered statically from the vendor driver
+(no card needed) — the confirmed facts below; the remaining gaps are what steps
+1–5 close on real hardware.
 
 ### Findings from vendor driver RE (static, no card)
 

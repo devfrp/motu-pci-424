@@ -36,7 +36,7 @@ Détails et options dans [Installation](#installation-toute-distro).
 | `kernel/motu424_main.c` | Attach/detach PCI, gestion des ressources + IRQ, gestionnaire d'interruption |
 | `kernel/motu424_hw.c` | **Abstraction matérielle — le seul fichier avec la vraie sémantique des registres** |
 | `kernel/motu424_pcm.c` | Callbacks PCM ALSA (lecture + capture) |
-| `tools/motu424-probe.c` | Dumpeur de BAR0 en espace utilisateur pour la rétro-ingénierie |
+| `tools/motu424-probe.c` | Énumérateur/dumpeur de BARs (modèle fenêtré) en espace utilisateur pour la rétro-ingénierie |
 | `tools/motu424-ctl.c` | **CLI de gestion façon CueMix** (horloge/format + mixeur de monitoring) via alsa-lib |
 | `tools/motu424-gui` | **GUI GTK4** (panneau de contrôle, front-end de `motu424-ctl`) |
 | `tools/re/` | Aides à la RE statique (`vtable-scan.py`, `xref.py` basé sur capstone) |
@@ -128,22 +128,31 @@ CueMix complète dès que le pilote expose ses kcontrols.
 
 ## Rétro-ingénierie
 
-La carte n'est pas présente sur la machine de développement, donc les offsets de
-registres dans `kernel/motu424.h` (marqués `TODO: verify`) sont des hypothèses.
-Pour les confirmer :
+Le pilote implémente déjà le modèle matériel rétro-conçu ; ce qu'une vraie carte
+doit fournir, ce sont les **adresses runtime rapportées par la carte** (base
+audio, ack IRQ, les deux bases d'aperture) et quelques valeurs encore marquées
+`TODO: verify`. Flux de bring-up :
 
 1. **Identifier la carte.** `lspci -nn | grep -i 137a` (0x137A = Mark of the Unicorn).
-   Mettre à jour `PCI_DEVICE_ID_MOTU_PCI*` si l'ID de périphérique rapporté diffère.
-2. **Dumper BAR0** avec le pilote constructeur *non lié* :
+2. **Énumérer + classer les BARs** avec le pilote *non lié* :
    ```sh
-   sudo ./tools/motu424-probe
+   sudo ./tools/motu424-probe                       # tague window A / B / port
+   sudo ./tools/motu424-probe 0000:01:00.0 0xc0000 0x400   # dump window-B @off,len
    ```
-3. **Differ** un dump pris au repos contre un pris pendant que la carte diffuse de
-   l'audio sous l'OS constructeur (macOS/Windows) pour localiser les registres
-   d'état, de position DMA et d'IRQ.
-4. **Tracer l'anneau DMA / le format d'événement** (nombre de canaux par famille
-   de fréquence, empaquetage 24 bits, boutisme).
-5. Mettre à jour les constantes dans `motu424.h` et les encodeurs dans `motu424_hw.c`.
+   Il lit les registres de banque window-B connus et prend un dump ciblé pour
+   **differ** repos vs. streaming (sous l'OS constructeur) et localiser les
+   adresses carte base audio / ack / aperture.
+3. **Injecter ces adresses** et charger le pilote :
+   ```sh
+   sudo insmod kernel/motu424.ko \
+       audio_base=0x… ack_addr=0x… play_aperture=0x… cap_aperture=0x…
+   ```
+   Sans elles la carte s'enregistre mais le streaming est refusé (`-ENXIO`) —
+   c'est volontaire, le pilote ne touche jamais d'adresses inconnues.
+4. **Tracer le format d'événement** (nombre de canaux par famille de fréquence,
+   empaquetage 24 bits, boutisme) et le dword exact `base+0x64`.
+5. Replier les valeurs confirmées dans `motu424.h` / `motu424_hw.c` (retirer les
+   paramètres).
 
 Une grande partie du protocole a **déjà** été récupérée statiquement depuis le
 pilote constructeur (sans carte) — les faits confirmés ci-dessous remplacent les
