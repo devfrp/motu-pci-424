@@ -118,18 +118,20 @@
 #define MOTU424_PERIOD_UNIT	0x800u	/* vendor period accumulator bound   */
 
 /* --------------------------------------------------------------------------
- * PIO aperture ring - CONFIRMED shape, TODO: verify addresses
+ * PIO aperture ring - CONFIRMED shape (arm routine fn 0x2c150)
  * --------------------------------------------------------------------------
  * Audio is NOT host bus-master DMA. The vendor pushes samples into a window-B
  * aperture with WRITE_REGISTER_BUFFER_ULONG (<=64 KB bursts, dword units) and
- * runs a software readHead/writeHead/len ring against a hardware "dmaPoint";
- * len is a power of two in dwords. The aperture base addresses below are
- * PLACEHOLDERS (the real values come from the vendor config path and are not
- * yet recovered) - TODO: verify on hardware before trusting any audio I/O.
+ * runs a software readHead/writeHead/len ring against a hardware "dmaPoint".
+ *
+ * The aperture base + length are RUNTIME values read from the audio sub-object
+ * (play: base [A+0x18], len [A+0x1c]; capture: base [A+0x28], len [A+0x2c]) -
+ * card-reported, like the audio base itself, so they cannot be known without a
+ * card. Before streaming a direction the driver programs a page/segment select:
+ * WRITE_PORT(port+0x8, apertureBase >> 22) - the window-B 4 MB page index.
  */
-#define MOTU424_APERTURE_PLAY	0x00200000u	/* TODO: verify */
-#define MOTU424_APERTURE_CAP	0x00300000u	/* TODO: verify */
-#define MOTU424_RING_DWORDS	0x4000u		/* 64 KB, power of two */
+#define MOTU424_APERTURE_PAGE_SHIFT	22	/* base>>22 -> port+0x8 page reg */
+#define MOTU424_RING_DWORDS	0x4000u		/* 64 KB burst, power of two */
 #define MOTU424_RING_BYTES	(MOTU424_RING_DWORDS * 4)
 
 /*
@@ -196,9 +198,10 @@ struct motu424 {
 	spinlock_t lock;		/* guards register access + stream state */
 
 	/* Card-reported runtime card-addresses (0 = not yet discovered). */
-	u32 audio_base;			/* audio register block base */
-	u32 ack_addr;			/* IRQ ack register          */
-	u32 mix_base;			/* CueMix coefficient region */
+	u32 audio_base;			/* audio register block base    */
+	u32 ack_addr;			/* IRQ ack register             */
+	u32 mix_base;			/* CueMix coefficient region    */
+	u32 aperture[2];		/* [0]=playback [1]=capture base */
 
 	struct snd_pcm *pcm;
 	struct motu424_stream playback;

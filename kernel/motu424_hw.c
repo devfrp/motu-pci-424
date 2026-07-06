@@ -28,7 +28,6 @@
  *
  * Aperture ring base addresses are placeholders (TODO: verify on card).
  */
-#include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
 
@@ -44,6 +43,12 @@ MODULE_PARM_DESC(ack_addr, "Card address of the IRQ ack register (from probe)");
 static unsigned int mix_base;
 module_param(mix_base, uint, 0444);
 MODULE_PARM_DESC(mix_base, "Card address of the CueMix coefficient region (from probe)");
+static unsigned int play_aperture;
+module_param(play_aperture, uint, 0444);
+MODULE_PARM_DESC(play_aperture, "Card address of the playback aperture (from probe)");
+static unsigned int cap_aperture;
+module_param(cap_aperture, uint, 0444);
+MODULE_PARM_DESC(cap_aperture, "Card address of the capture aperture (from probe)");
 
 /* --- windowed card-address dispatch (vendor accessors 0x29110/0x29160) --- */
 static void __iomem *motu424_addr(struct motu424 *chip, u32 card_addr)
@@ -136,6 +141,8 @@ int motu424_hw_init(struct motu424 *chip)
 	chip->audio_base = audio_base;
 	chip->ack_addr = ack_addr;
 	chip->mix_base = mix_base;
+	chip->aperture[0] = play_aperture;
+	chip->aperture[1] = cap_aperture;
 
 	spin_lock_irqsave(&chip->lock, flags);
 
@@ -235,7 +242,7 @@ static void motu424_push_period(struct motu424 *chip, struct motu424_stream *s,
 				bool playback)
 {
 	struct snd_pcm_runtime *runtime = s->substream->runtime;
-	u32 aperture = playback ? MOTU424_APERTURE_PLAY : MOTU424_APERTURE_CAP;
+	u32 aperture = chip->aperture[playback ? 0 : 1];
 	unsigned int bytes = s->period_bytes;
 	unsigned int ring_off = (s->ring_pos * 4) % MOTU424_RING_BYTES;
 
@@ -268,9 +275,9 @@ int motu424_hw_stream_prepare(struct motu424 *chip,
 	struct motu424_stream *s = playback ? &chip->playback : &chip->capture;
 	unsigned long flags;
 
-	if (!chip->audio_base || !chip->ack_addr) {
+	if (!chip->audio_base || !chip->ack_addr || !chip->aperture[playback ? 0 : 1]) {
 		dev_warn_once(&chip->pci->dev,
-			      "streaming disabled: audio_base/ack_addr not set (see motu424 module parameters)\n");
+			      "streaming disabled: audio_base/ack_addr/aperture not set (see motu424 module parameters)\n");
 		return -ENXIO;
 	}
 
@@ -299,6 +306,13 @@ void motu424_hw_stream_start(struct motu424 *chip, bool playback)
 	unsigned long flags;
 
 	spin_lock_irqsave(&chip->lock, flags);
+
+	/* Page the window-B aperture in via the port bridge (vendor arm
+	 * routine fn 0x2c150: WRITE_PORT(port+0x8, apertureBase >> 22)). */
+	if (chip->port)
+		iowrite32(chip->aperture[playback ? 0 : 1] >>
+			  MOTU424_APERTURE_PAGE_SHIFT,
+			  chip->port + MOTU424_PORT_INIT);
 
 	/* Double-buffer: keep two periods ahead of the card. */
 	if (playback) {

@@ -75,8 +75,9 @@ base and go through the same window dispatch:
 | Reg (base+off) | Dir | Method VA | Meaning (recovered) |
 |---|---|---|---|
 | `base+0x54` | W `1` | `0x29660` (slot 1) | stream/DMA **enable** (writes 1 when arg≠0) |
+| `base+0x5c` | W | `0x29840` | secondary param (writes `[this+0x10]`); purpose OPEN |
 | `base+0x60` | W | `0x295e0` (slot 0) | **period increment** = `0x10 << (2*family)` (×2 if `[+0x1cc]>1`); samples-per-IRQ / block size |
-| `base+0x64` | W | `0x297f0` (slot 2) | rate/clock **parameter** (caller-supplied dword) |
+| `base+0x64` | W | `0x297f0` (slot 2) | rate/clock **parameter** (caller-supplied dword, no encoding in the setter) |
 | `base+0x128` | R→W`0` | ISR `0x2bae0` | position counter; read each period, then zeroed |
 | `base+0x12c` | R→W`0` | ISR `0x2bae0` | numerator; read, divided by `base+0x130`, then zeroed |
 | `base+0x130` | R→W`0` | ISR `0x2bae0` | divisor; read then zeroed |
@@ -169,14 +170,25 @@ setter⇄object mapping is not what it appears. Resolving this reliably needs
 proper type recovery (Ghidra) or a card to observe the actual `base+0x64` writes.
 Treat the "`+0x64` = small mode index" reading as a hypothesis, not a fact.
 
+## Port bridge page register (CONFIRMED — arm fn `0x2c150`)
+
+Port `+0x8` (previously "init value") is the **window-B page/segment select**:
+the arm routine writes `apertureBase >> 22` there before streaming each
+direction (`>>22` = the 4 MB window-B page index). See `transport.md`.
+
 ## Genuinely open (needs a card or more RE)
 
-- The **numeric** value of the audio base (`devext+0x98`) and ack address
-  (`devext+0x88`): both are read from the card / a bank sub-object at init, so
-  they are runtime values, not static constants. On a card, dump them via the
-  probe. The *structure* (base+0x54/0x60/0x64/0x128/0x12c/0x130, ack=0x10) is
-  fixed and known.
-- Clock-source select register and the `base+0x64` parameter encoding.
+- The **numeric** values of the audio base (`devext+0x98`), ack address
+  (`devext+0x88`) and the two aperture bases (audio sub-object `[A+0x18]`
+  playback / `[A+0x28]` capture, with lengths `[A+0x1c]`/`[A+0x2c]`): all read
+  from the card at init, so they are runtime values, not static constants. On a
+  card, dump them via the probe. The *structure* is fixed and known (base+0x54/
+  0x5c/0x60/0x64/0x128/0x12c/0x130, ack=0x10, page=base>>22 to port+0x8).
+- Clock-**source** select register and the `base+0x64` parameter encoding: the
+  setter (`0x297f0`, vtable slot 0x8) writes a caller-supplied dword with no
+  encoding of its own; the value comes from the `[obj+0x3e]` 11-way enum
+  (jump table `0x11420`) / the `fn 0x13c30` arm chain (observed value `4` for
+  the 4x family) — resolving the full enum→dword table needs the virtual
+  dispatch traced deeper or a card.
 - The `dmaPoint`/ring bounds guard (`0x255bb`) consumes a position read by the
-  caller; ties to `base+0x128` above.
-- FPGA upload handshake (see `fpga-upload.md`).
+  caller; ties to `base+0x128` and `0x29500(A+0x10,A+0x14,A+0x18)`.

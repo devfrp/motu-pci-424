@@ -71,9 +71,34 @@ Native samples are 24-bit, packed **3 bytes per channel per frame**
 shrinks with the rate family (1x→2x→4x); the concrete mapping is the Phase 3.3
 clock/rate work and is still OPEN.
 
+## Aperture bases are runtime, and paged via the port bridge (CONFIRMED — arm fn `0x2c150`)
+
+The arm/prepare routine `fn 0x2c150` (the sole caller of the bulk push `0x29420`)
+resolves the aperture from the audio sub-object `A = [devext+0x70]` (obtained via
+`this` vtable slot `0x44`):
+
+| Field | Meaning |
+|---|---|
+| `[A+0x04]` | IRQ **ack** card-address (→ `devext+0x88`) — confirms register-map.md |
+| `[A+0x18]` / `[A+0x1c]` | **playback** aperture base / length (bytes) |
+| `[A+0x28]` / `[A+0x2c]` | **capture** aperture base / length (bytes); gated by `[A+0x24]!=0` |
+
+So playback and capture use **separate apertures** (both runtime card-reported —
+they cannot be static constants). Before streaming a direction the driver pages
+the window in:
+
+```
+WRITE_PORT(port_base + 0x8, apertureBase >> 22);   // 4 MB window-B page index
+```
+
+then, per direction: `WRITE_PORT(port+0x4, 1)` (strobe) → bulk push `0x29420` →
+set page (above) → zero-fill the aperture (`for edi in [0,len) step 4:
+WRITE_REGISTER(dispatch(base+edi), 0)`) → `call 0x29500(A+0x10, A+0x14, A+0x18)`
+(post-push commit, unwalked).
+
 ## Open
 
-- Concrete card address of the `dmaPoint` register (the ALSA `.pointer` source).
-- Aperture base/size in window B (only the per-burst ≤64 KB and dword units are
-  confirmed; the ring `len` and base come from the config path).
-- Whether playback and capture use separate apertures/rings or one duplex ring.
+- Concrete card address of the `dmaPoint` register (the ALSA `.pointer` source);
+  `0x29500`'s three args (`A+0x10/0x14/0x18`) are the likely home.
+- Aperture `len` power-of-two assumption vs. the runtime `[A+0x1c]`/`[A+0x2c]`.
+- Endianness / channel packing of the aperture payload.
