@@ -7,12 +7,16 @@
 A from-scratch Linux ALSA driver for the **MOTU PCI-324 / PCI-424** audio card
 and its AudioWire breakout interfaces (2408, 24I/O, 828, HD192, 896HD, …).
 
-> **Status: framework complete, hardware protocol unconfirmed.**
-> The PCI / DMA / IRQ / ALSA machinery is real and complete. The MOTU
-> PCI-324/424 is undocumented, so the *register map and DMA/transport protocol*
-> are a documented hypothesis that must be validated against a real card. Until
-> then the module loads and creates an ALSA device but will not produce correct
-> audio. See [Reverse engineering](#reverse-engineering).
+> **Status: driver implements the reverse-engineered hardware model; awaiting
+> a real card.** The PCI / IRQ / ALSA machinery is real and complete, and the
+> hardware layer now encodes the model recovered from the vendor Windows driver
+> (windowed card-address space, I/O-port bridge, PIO-aperture transport, real
+> IRQ ack protocol — see [Reverse engineering](#reverse-engineering)). Two
+> things still gate audio: the **card-reported runtime addresses** (audio
+> base / IRQ ack — injectable via `motu424.audio_base=`/`ack_addr=` module
+> parameters once dumped from a card) and the aperture ring base (placeholder,
+> `TODO: verify`). The module loads and registers an ALSA card; streaming is
+> refused until those values are known.
 
 ## Quick start
 
@@ -27,7 +31,7 @@ Installs on any distro (deps + DKMS module + tools). Details and options under
 
 | Path | Role |
 |------|------|
-| `kernel/motu424.h` | Shared defs + the **hypothesised register map** (single source of truth) |
+| `kernel/motu424.h` | Shared defs + the **RE'd hardware model** (single source of truth) |
 | `kernel/motu424_main.c` | PCI attach/detach, resource + IRQ management, interrupt handler |
 | `kernel/motu424_hw.c` | **Hardware abstraction — the only file with real register semantics** |
 | `kernel/motu424_pcm.c` | ALSA PCM callbacks (playback + capture) |
@@ -170,8 +174,10 @@ virtual-dispatch sites). These **supersede the hypothesised register map** in
   passive-serial FPGA (`altera424b.rbf`, **not** present in the 4.0.6 vendor
   installer — likely self-configured from onboard flash); the PCIe **HD Express**
   uses an ARM SoC + Xilinx Virtex, shipped as `HDExpress_FullImageRun.bin` (a
-  24-byte-header container, checksum-verified). `MOTUAW.sys` has no file-I/O, so
-  a Linux driver will supply firmware via `request_firmware()` where needed.
+  24-byte-header container, checksum-verified). Verdict of the full RE
+  ([`docs/fpga-upload.md`](docs/fpga-upload.md)): the classic card needs **no
+  host firmware upload** (no `request_firmware()`); only the PCIe HD Express
+  variant takes a host image.
 - **CueMix control set** decoded from the shipped `CueMixFX-PCI-424.touchosc`
   (MOTU's CueMix OSC API): an input×mix-bus monitor matrix + per-input analog
   conditioning + clock/format. Drives `tools/motu424-ctl` — see

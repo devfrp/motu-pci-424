@@ -7,12 +7,17 @@
 Un pilote ALSA Linux écrit de zéro pour la carte audio **MOTU PCI-324 / PCI-424**
 et ses interfaces de sortie AudioWire (2408, 24I/O, 828, HD192, 896HD, …).
 
-> **État : ossature complète, protocole matériel non confirmé.**
-> Toute la mécanique PCI / DMA / IRQ / ALSA est réelle et complète. La MOTU
-> PCI-324/424 n'est pas documentée, donc la *carte des registres et le protocole
-> DMA/transport* sont une hypothèse documentée à valider sur une vraie carte.
-> D'ici là, le module se charge et crée un périphérique ALSA mais ne produira pas
-> un son correct. Voir [Rétro-ingénierie](#rétro-ingénierie).
+> **État : le pilote implémente le modèle matériel rétro-conçu ; en attente
+> d'une vraie carte.** Toute la mécanique PCI / IRQ / ALSA est réelle et
+> complète, et la couche matérielle encode désormais le modèle récupéré du
+> pilote Windows constructeur (espace d'adressage fenêtré, pont I/O-port,
+> transport PIO vers l'ouverture, vrai protocole d'acquittement IRQ — voir
+> [Rétro-ingénierie](#rétro-ingénierie)). Deux choses bloquent encore l'audio :
+> les **adresses runtime rapportées par la carte** (base audio / ack IRQ —
+> injectables via les paramètres module `motu424.audio_base=`/`ack_addr=` une
+> fois dumpées sur une carte) et la base de l'anneau d'ouverture (placeholder,
+> `TODO: verify`). Le module se charge et enregistre une carte ALSA ; le
+> streaming est refusé tant que ces valeurs sont inconnues.
 
 ## Démarrage rapide
 
@@ -27,7 +32,7 @@ Détails et options dans [Installation](#installation-toute-distro).
 
 | Chemin | Rôle |
 |--------|------|
-| `kernel/motu424.h` | Définitions partagées + la **carte des registres hypothétique** (source de vérité unique) |
+| `kernel/motu424.h` | Définitions partagées + le **modèle matériel rétro-conçu** (source de vérité unique) |
 | `kernel/motu424_main.c` | Attach/detach PCI, gestion des ressources + IRQ, gestionnaire d'interruption |
 | `kernel/motu424_hw.c` | **Abstraction matérielle — le seul fichier avec la vraie sémantique des registres** |
 | `kernel/motu424_pcm.c` | Callbacks PCM ALSA (lecture + capture) |
@@ -183,8 +188,9 @@ hypothétique** de `motu424.h` :
   4.0.6 — probablement auto-configuré depuis une flash embarquée) ; la PCIe
   **HD Express** utilise un SoC ARM + Xilinx Virtex, livré sous forme de
   `HDExpress_FullImageRun.bin` (un conteneur à en-tête de 24 octets, checksum
-  vérifié). `MOTUAW.sys` n'a aucune E/S fichier, donc un pilote Linux fournira le
-  firmware via `request_firmware()` là où c'est nécessaire.
+  vérifié). Verdict de la RE complète ([`docs/fpga-upload.md`](docs/fpga-upload.md)) :
+  la carte classique ne nécessite **aucun envoi de firmware par l'hôte** (pas de
+  `request_firmware()`) ; seule la variante PCIe HD Express reçoit une image hôte.
 - **Jeu de contrôles CueMix** décodé depuis le `CueMixFX-PCI-424.touchosc` fourni
   (l'API OSC CueMix de MOTU) : une matrice de monitoring entrées×bus + le
   conditionnement analogique par entrée + horloge/format. Pilote
