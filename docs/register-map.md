@@ -143,8 +143,11 @@ Method `0x298e0` is the **start/enable** sequence: `WRITE_PORT(+0x0, 4)` then
   (2*family)` → `base+0x60` (16 / 64 / 256, doubled in one mode).
 - **base rate** is validated as **44100 or 48000 only** (`0x191a0`; else logs
   error `0x4c5`); the 2x/4x multiply is applied on top.
-- Still OPEN: the exact **clock-source select** register/bits (internal / word /
-  ADAT / SPDIF) and what dword the `base+0x64` parameter encodes.
+- **Resolved (2026-07-06):** `base+0x64` selects the internal **rate mode**
+  (see the `[obj+0x3e]`/`fn 0x11330` note below); there is **no clock-SOURCE
+  register in MOTUAW.sys** — external-source (word/ADAT/SPDIF) selection is a
+  higher-layer / CueMix concern, not an audio-base register. Only the exact
+  enum→dword value written to `base+0x64` per rate remains (needs a card).
 
 **New lead (rate-classification fn `0x11320`, no card).** Before the register
 writes, the driver classifies the requested Hz into per-object state bytes:
@@ -190,5 +193,16 @@ direction (`>>22` = the 4 MB window-B page index). See `transport.md`.
   (jump table `0x11420`) / the `fn 0x13c30` arm chain (observed value `4` for
   the 4x family) — resolving the full enum→dword table needs the virtual
   dispatch traced deeper or a card.
+  **Update (2026-07-06): the `[obj+0x3e]` enum is the RATE-mode index, not a
+  clock source.** Classifier `fn 0x11330` reads it and its jump table `0x11420`
+  maps each value straight to a standard Hz immediate (`0xac44`/`0xbb80`/
+  `0x15888`/`0x17700` = 44.1/48/88.2/96k), i.e. `+0x3e` selects internal
+  sample-rate mode. **No clock-SOURCE register lives in MOTUAW.sys**: the only
+  clock strings are SMPTE ("Unknown SMPTE format", "SMPTE output not supported
+  by this interface") — no "word clock"/"ADAT"/"internal" register enum. So
+  internal/word/ADAT/SPDIF source selection is done at a higher layer (the app
+  / CueMix control path, `mix_base` region — see `cuemix-control-map.md`), not
+  as a simple audio-base register. This is now a CueMix-side / card-bound item,
+  not a missing audio register.
 - The `dmaPoint`/ring bounds guard (`0x255bb`) consumes a position read by the
   caller; ties to `base+0x128` and `0x29500(A+0x10,A+0x14,A+0x18)`.
